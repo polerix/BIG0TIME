@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 import re
 """
 Big0Time Project Sync Script
@@ -31,6 +32,7 @@ SCREENSHOT_EXPIRY_SECONDS = 24 * 60 * 60  # Screenshots expire after 24 hours
 
 # Pinned projects
 PINNED_PROJECTS = [
+    "ButterPass",
     "security-adventure",
     "vax-console-sim",
     "kraemeverse-wiki",
@@ -270,7 +272,7 @@ def generate_project_html(project_name: str, project_dir: Path, pinned: bool = F
         screenshot_path = SCREENSHOT_DIR / f"{project_name.lower()}.png"
         capture_screenshot(open_url, screenshot_path, force=force_screenshot)
         if screenshot_path.exists():
-            style = f'style="--bg-image: url(resources/screenshots/" + project_name.lower() + ".png);"'
+            style = f'style="--bg-image: url(resources/screenshots/{project_name.lower()}.png);"'
 
 
     # Determine the status icon
