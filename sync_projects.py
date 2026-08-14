@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Big0Time Project Sync Script
+Big0Time LCARS Project Sync Script
 
-Scans the GitHub projects directory and updates the big0time index.html with:
-- Projects sorted by modification date (newest first)
-- Grayed out text for projects without landing pages
-- Fire icon (🔥) for recently active projects (modified in last 7 days)
-- Lightning icon (⚡) for GitHub Actions workflow-deployed projects
-- Globe icon (🌐) for static GitHub Pages deployed projects
-- Copies under-construction.html to projects without landing pages
-- Supports both static direct hosting and GitHub Actions workflow hosting
+Scans the GitHub projects directory and updates big0time index.html with:
+- Categorized LCARS sections:
+  1. Pinned Core Systems
+  2. Business & Enterprise Solutions
+  3. Games & Interactive Simulations
+  4. Funky Toys & Experimental Labs
+- Automatic dual-hosting detection (Static Pages vs GitHub Actions Workflow)
+- Live GitHub Pages API status verification
+- Dynamic search & category filtering metadata
 """
 
 import os
@@ -27,9 +28,8 @@ GITHUB_DIR = DEFAULT_GITHUB if DEFAULT_GITHUB.exists() else SCRIPT_DIR.parent
 big0time_DIR = SCRIPT_DIR
 UNDER_CONSTRUCTION = big0time_DIR / "under-construction.html"
 INDEX_HTML = big0time_DIR / "index.html"
-RECENT_DAYS = 7  # Projects modified within this many days get fire icon
+RECENT_DAYS = 7
 
-# Landing page patterns to check (in order of preference)
 LANDING_PAGES = [
     "index.html",
     "index.htm",
@@ -39,7 +39,6 @@ LANDING_PAGES = [
     "public/index.html",
 ]
 
-# Pinned projects configuration (name, screenshot relative path if any)
 PINNED_PROJECTS = [
     ("ButterPass", "resources/screenshots/butterpass.png", "https://polerix.github.io/ButterPass-95/"),
     ("security-adventure", "resources/screenshots/security-adventure.png", "https://polerix.github.io/security-adventure/"),
@@ -56,6 +55,105 @@ PINNED_PROJECTS = [
     ("pixel-duel-ii", "resources/screenshots/pixel-duel-ii.png", "https://polerix.github.io/pixel-duel-ii/"),
     ("pixel-duel", "resources/screenshots/pixel-duel.png", "https://polerix.github.io/pixel-duel/"),
 ]
+
+# Explicit Categorization Map for accuracy
+CATEGORY_MAP = {
+    # Business & Enterprise Relevance
+    'security-adventure': 'business',
+    'defrag-tool': 'business',
+    'sandrine-portfolio': 'business',
+    'vax-console-sim': 'business',
+    'hackers-team': 'business',
+    'bus-broadcaster': 'business',
+    'bus-broadcaster-swift': 'business',
+    'lucid-reader': 'business',
+    'motion-tracker': 'business',
+    'ytdl-gui': 'business',
+    'eyephone': 'business',
+    'streamliner': 'business',
+    'OBSTriCloner': 'business',
+    'RecordMonitor': 'business',
+    'ServoSkull': 'business',
+    'VK_Terminal': 'business',
+    'vk_console': 'business',
+    'PixelMonitor': 'business',
+    'm314-tracker': 'business',
+    'obs-projects': 'business',
+    'apfel': 'business',
+    'phantom': 'business',
+    
+    # Games & Interactive Simulations
+    'neutral-zero': 'games',
+    'mobius-farm-II': 'games',
+    'mobius-farm': 'games',
+    'pixel-duel-ii': 'games',
+    'pixel-duel': 'games',
+    'burger-time': 'games',
+    'colonbo': 'games',
+    'cosmic-brawler': 'games',
+    'Cosmo Brawl': 'games',
+    'Demon-Attack': 'games',
+    'Flipside': 'games',
+    'leap-frogs': 'games',
+    'moof-patrol': 'games',
+    'moofo': 'games',
+    'moovers': 'games',
+    'otv': 'games',
+    'satans-spreadsheet': 'games',
+    'tornado-cones': 'games',
+    'tubbers': 'games',
+    'bubalina': 'games',
+    'BPM-Vending Pigs': 'games',
+    'bpm-vending-pigs': 'games',
+    'xenohive-gauntlet': 'games',
+    'poop-boy': 'games',
+    'petscii_game': 'games',
+    'Drone Swarm Sim': 'games',
+    'PORTS Back Panel Brawl': 'games',
+    
+    # Funky Toys & Experiments
+    'ButterPass': 'toys',
+    'ButterPass-95': 'toys',
+    'aetherstones-council-of-green-point': 'toys',
+    'touski': 'toys',
+    'kraemeverse-wiki': 'toys',
+    'ascii-lab': 'toys',
+    'glitcher-app': 'toys',
+    'greco-time': 'toys',
+    'headroom': 'toys',
+    'smrt': 'toys',
+    'soul-forge': 'toys',
+    'swarm-system-lab': 'toys',
+    'c64-os': 'toys',
+    'raspberry-pi-fallout': 'toys',
+    'raspberry-pi-2b-commodore-1701-screen': 'toys',
+    'payload-emulator-loop': 'toys',
+    'blinkwell-observer': 'toys',
+    'diffvg': 'toys',
+    'tmp-nz': 'toys',
+    'moo-shroom': 'toys',
+    'maudlin-modellers': 'toys',
+    'alien-hive': 'toys',
+    'valkyr': 'toys',
+    'HailMary': 'toys',
+    'FunHaus': 'toys',
+    'Gargoyle': 'toys',
+    'Perambulators': 'toys'
+}
+
+
+def get_project_category(project_name: str) -> str:
+    """Return category ('business', 'games', 'toys') for a given project"""
+    if project_name in CATEGORY_MAP:
+        return CATEGORY_MAP[project_name]
+    
+    # Keyword fallback
+    lower = project_name.lower()
+    if any(k in lower for k in ['tool', 'sec', 'doc', 'view', 'read', 'track', 'mon', 'sys', 'app', 'cli', 'bot']):
+        return 'business'
+    if any(k in lower for k in ['game', 'brawl', 'fight', 'play', 'race', 'farm', 'patrol', 'zero']):
+        return 'games'
+    return 'toys'
 
 
 def get_project_description(project_dir: Path) -> str:
@@ -90,19 +188,12 @@ def get_project_description(project_dir: Path) -> str:
 
 
 def get_github_url(project_name: str) -> str:
-    """Generate GitHub URL from project name"""
     if project_name == "ButterPass":
         return "https://github.com/polerix/ButterPass-95"
     return f"https://github.com/polerix/{project_name}"
 
 
 def get_hosting_info(project_name: str, project_dir: Path) -> dict:
-    """
-    Inspect project directory and GitHub API to determine hosting type:
-    - active_pages (legacy or workflow)
-    - has_static_landing
-    - has_workflow_build
-    """
     has_static = False
     for landing in LANDING_PAGES:
         if (project_dir / landing).exists():
@@ -131,7 +222,7 @@ def get_hosting_info(project_name: str, project_dir: Path) -> dict:
         url = pages_data.get("html_url") or f"https://polerix.github.io/{project_name}/"
         return {
             "has_landing": True,
-            "hosting_type": btype, # 'legacy' or 'workflow'
+            "hosting_type": btype,
             "deployed_url": url,
             "is_active": True
         }
@@ -160,9 +251,7 @@ def get_hosting_info(project_name: str, project_dir: Path) -> dict:
 
 
 def get_project_modification_date(project_dir: Path) -> datetime:
-    """Get the most recent modification date via git or stat"""
     latest_date = datetime(1970, 1, 1)
-
     git_dir = project_dir / ".git"
     if git_dir.exists():
         try:
@@ -189,13 +278,11 @@ def get_project_modification_date(project_dir: Path) -> datetime:
 
 
 def is_recently_modified(project_dir: Path) -> bool:
-    """Check if project was modified in the last RECENT_DAYS days"""
     mod_date = get_project_modification_date(project_dir)
     return datetime.now() - mod_date < timedelta(days=RECENT_DAYS)
 
 
 def copy_under_construction(project_name: str) -> str:
-    """Copy under-construction.html to a project directory"""
     project_dir = GITHUB_DIR / project_name
     if not project_dir.exists():
         return "under-construction.html"
@@ -204,16 +291,15 @@ def copy_under_construction(project_name: str) -> str:
     if not dest.exists() and UNDER_CONSTRUCTION.exists():
         try:
             shutil.copy2(UNDER_CONSTRUCTION, dest)
-            print(f"  Copied under-construction.html to {project_name}")
-        except Exception as e:
-            print(f"  Warning: could not copy under-construction.html to {project_name}: {e}")
+        except Exception:
+            pass
 
     return "under-construction.html"
 
 
-def generate_project_html(project_name: str, project_dir: Path) -> str:
-    """Generate HTML for a single project entry"""
-
+def generate_card_html(project_name: str, project_dir: Path, idx_num: int) -> tuple[str, str]:
+    """Generate LCARS styled card HTML and return (category, html)"""
+    category = get_project_category(project_name)
     h_info = get_hosting_info(project_name, project_dir)
     is_recent = is_recently_modified(project_dir)
     description = get_project_description(project_dir)
@@ -226,33 +312,40 @@ def generate_project_html(project_name: str, project_dir: Path) -> str:
     open_url = h_info["deployed_url"]
     github_url = get_github_url(project_name)
 
-    icons = ""
+    badge = ""
     if is_recent:
-        icons += "🔥 "
+        badge += '<span class="lcars-tag tag-recent">🔥 ACTIVE</span> '
     if h_info["hosting_type"] == "workflow":
-        icons += "⚡ "
+        badge += '<span class="lcars-tag tag-workflow">⚡ ACTIONS</span> '
+    elif h_info["has_landing"]:
+        badge += '<span class="lcars-tag tag-static">🌐 PAGES</span> '
+    else:
+        badge += '<span class="lcars-tag tag-muted">🚧 LAB</span> '
 
     has_landing = h_info["has_landing"]
     muted_class = " muted" if not has_landing else ""
 
-    html = f'''      <div class="bubble{muted_class}" data-name="{project_name}">
-        <div class="inner-glow"></div>
-        <div class="light-spot"></div>
-        <div class="name">{icons}{project_name}</div>
-        <div class="desc">{description}</div>
-        <div class="actions">
-          <a href="{open_url}" target="_blank" rel="noopener noreferrer"><button>Open</button></a>
-          <a href="{github_url}" target="_blank" rel="noopener noreferrer"><button>Repo</button></a>
-        </div>
-      </div>'''
+    sys_id = f"LCARS-{category[:3].upper()}-{idx_num:03d}"
 
-    return html
+    html = f'''        <div class="bubble{muted_class}" data-category="{category}" data-name="{project_name.lower()}" data-search="{project_name.lower()} {description.lower()}">
+          <div class="card-header">
+            <span class="sys-id">{sys_id}</span>
+            <div class="card-badges">{badge}</div>
+          </div>
+          <div class="name">{project_name}</div>
+          <div class="desc">{description}</div>
+          <div class="actions">
+            <a href="{open_url}" target="_blank" rel="noopener noreferrer"><button class="lcars-btn open-btn">EXECUTE</button></a>
+            <a href="{github_url}" target="_blank" rel="noopener noreferrer"><button class="lcars-btn repo-btn">REPOS</button></a>
+          </div>
+        </div>'''
+
+    return category, html
 
 
 def generate_pinned_html(pinned_list: list[tuple[str, str, str]], projects_dict: dict) -> str:
-    """Generate HTML for pinned projects section"""
     entries = []
-    for name, screenshot, default_url in pinned_list:
+    for idx, (name, screenshot, default_url) in enumerate(pinned_list, 1):
         p_dir = GITHUB_DIR / name
         if not p_dir.exists():
             for p_name, (path, mdate) in projects_dict.items():
@@ -264,32 +357,34 @@ def generate_pinned_html(pinned_list: list[tuple[str, str, str]], projects_dict:
         description = re.sub(r'<[^>]+>', '', description).replace('**', '').replace('\\u', '').strip()
         if len(description) > 80:
             description = description[:77] + '...'
-            
+
         open_url = default_url
         if p_dir.exists():
             h_info = get_hosting_info(name, p_dir)
             open_url = h_info["deployed_url"]
 
         github_url = get_github_url(name)
-
         bg_style = f' style="--bg-image: url({screenshot});"' if screenshot else ''
+        sys_id = f"LCARS-PRIORITY-{idx:02d}"
 
-        entries.append(f'''      <div class="bubble pinned" data-name="{name}"{bg_style}>
-        <div class="name">🥇 {name}</div>
-        <div class="desc">{description}</div>
-        <div class="actions">
-          <a href="{open_url}" target="_blank" rel="noopener noreferrer"><button>Open</button></a>
-          <a href="{github_url}" target="_blank" rel="noopener noreferrer"><button>Repo</button></a>
-        </div>
-      </div>''')
+        entries.append(f'''        <div class="bubble pinned" data-category="pinned" data-name="{name.lower()}" data-search="{name.lower()} {description.lower()}"{bg_style}>
+          <div class="card-header">
+            <span class="sys-id">{sys_id}</span>
+            <span class="lcars-tag tag-pinned">🥇 FEATURED</span>
+          </div>
+          <div class="name">{name}</div>
+          <div class="desc">{description}</div>
+          <div class="actions">
+            <a href="{open_url}" target="_blank" rel="noopener noreferrer"><button class="lcars-btn open-btn">EXECUTE</button></a>
+            <a href="{github_url}" target="_blank" rel="noopener noreferrer"><button class="lcars-btn repo-btn">REPOS</button></a>
+          </div>
+        </div>''')
 
     return '\n'.join(entries)
 
 
 def get_all_projects() -> list[tuple[Path, datetime]]:
-    """Get all project directories sorted by modification date"""
     projects = []
-
     for item in GITHUB_DIR.iterdir():
         if not item.is_dir():
             continue
@@ -306,37 +401,66 @@ def get_all_projects() -> list[tuple[Path, datetime]]:
 
 
 def update_index_html():
-    """Update the index.html with current project list"""
-
     print(f"Scanning projects in {GITHUB_DIR}...")
     projects = get_all_projects()
     print(f"Found {len(projects)} projects")
 
     projects_dict = {p[0].name: p for p in projects}
 
-    # Generate Pinned Projects Section
-    pinned_html = generate_pinned_html(PINNED_PROJECTS, projects_dict)
-
-    # Generate All Projects Grid Entries
-    project_entries = []
+    # Categorized buckets
+    cats = {'business': [], 'games': [], 'toys': []}
+    
+    idx_counter = 1
     for project_dir, mod_date in projects:
         project_name = project_dir.name
-        print(f"  {project_name}: {mod_date.strftime('%Y-%m-%d')}", end="")
+        cat, card_html = generate_card_html(project_name, project_dir, idx_counter)
+        cats[cat].append(card_html)
+        idx_counter += 1
 
-        h_info = get_hosting_info(project_name, project_dir)
-        is_recent = is_recently_modified(project_dir)
+    pinned_html = generate_pinned_html(PINNED_PROJECTS, projects_dict)
 
-        if not h_info["has_landing"]:
-            print(" [no landing]", end="")
-        else:
-            print(f" [{h_info['hosting_type']}]", end="")
-        if is_recent:
-            print(" [recent]", end="")
+    # Build structured LCARS sections: Business Relevance FIRST, then Games, then Funky Toys
+    lcars_body = f'''
+    <!-- SECTION: PINNED CORE SYSTEMS -->
+    <div class="lcars-section-header amber">
+      <div class="lcars-elbow-top"></div>
+      <div class="lcars-header-text">01 // FEATURED CORE SYSTEMS</div>
+      <div class="lcars-header-bar"></div>
+    </div>
+    <div class="grid" id="grid-pinned">
+{pinned_html}
+    </div>
 
-        print()
+    <!-- SECTION: BUSINESS & ENTERPRISE RELEVANCE -->
+    <div class="lcars-section-header gold" id="sec-business">
+      <div class="lcars-elbow-top"></div>
+      <div class="lcars-header-text">02 // BUSINESS & ENTERPRISE SOLUTIONS ({len(cats['business'])} NODES)</div>
+      <div class="lcars-header-bar"></div>
+    </div>
+    <div class="grid" id="grid-business">
+{chr(10).join(cats['business'])}
+    </div>
 
-        html = generate_project_html(project_name, project_dir)
-        project_entries.append(html)
+    <!-- SECTION: GAMES & INTERACTIVE SIMULATIONS -->
+    <div class="lcars-section-header blue" id="sec-games">
+      <div class="lcars-elbow-top"></div>
+      <div class="lcars-header-text">03 // GAMES & INTERACTIVE SIMULATIONS ({len(cats['games'])} NODES)</div>
+      <div class="lcars-header-bar"></div>
+    </div>
+    <div class="grid" id="grid-games">
+{chr(10).join(cats['games'])}
+    </div>
+
+    <!-- SECTION: FUNKY TOYS & EXPERIMENTAL LABS -->
+    <div class="lcars-section-header purple" id="sec-toys">
+      <div class="lcars-elbow-top"></div>
+      <div class="lcars-header-text">04 // EXPERIMENTAL TOYS & LABS ({len(cats['toys'])} NODES)</div>
+      <div class="lcars-header-bar"></div>
+    </div>
+    <div class="grid" id="grid-toys">
+{chr(10).join(cats['toys'])}
+    </div>
+'''
 
     template = INDEX_HTML.read_text(encoding='utf-8')
 
@@ -350,29 +474,20 @@ def update_index_html():
         print("ERROR: Could not find menu markers in index.html")
         return
 
-    new_menu_content = (
-        '\n    <div class="grid">' +
-        '\n<div class="grid-title">Pinned</div>\n' +
-        pinned_html +
-        '\n<div class="grid-title">All Projects</div>\n' +
-        '\n'.join(project_entries) +
-        '\n    </div>'
-    )
-
     new_template = (
         template[:start_idx + len(menu_start)] +
-        new_menu_content +
+        lcars_body +
+        '\n' +
         template[end_idx:]
     )
 
     INDEX_HTML.write_text(new_template, encoding='utf-8')
-    print(f"\nSuccessfully updated {INDEX_HTML}")
+    print(f"\nSuccessfully updated {INDEX_HTML} with LCARS layout & categorization!")
 
 
 def main():
-    """Main entry point"""
     print("=" * 50)
-    print("Big0Time Project Sync")
+    print("Big0Time LCARS Sync & Categorization")
     print("=" * 50)
 
     if not GITHUB_DIR.exists():
@@ -384,7 +499,7 @@ def main():
         return
 
     update_index_html()
-    print("\nSync complete!")
+    print("\nLCARS Sync Complete!")
 
 
 if __name__ == "__main__":
