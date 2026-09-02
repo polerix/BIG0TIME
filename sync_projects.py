@@ -18,6 +18,7 @@ import re
 import json
 import shutil
 import subprocess
+import concurrent.futures
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -29,6 +30,8 @@ big0time_DIR = SCRIPT_DIR
 UNDER_CONSTRUCTION = big0time_DIR / "under-construction.html"
 INDEX_HTML = big0time_DIR / "index.html"
 RECENT_DAYS = 7
+
+PAGES_CACHE = {}
 
 LANDING_PAGES = [
     "index.html",
@@ -187,10 +190,71 @@ def get_project_description(project_dir: Path) -> str:
     return ""
 
 
-def get_github_url(project_name: str) -> str:
+def get_repo_info(project_dir: Path, project_name: str) -> tuple[str, str, str, str]:
+    """
+    Extract exact (owner, repo_name, github_url, default_pages_url) from .git remote origin
+    """
+    git_dir = project_dir / ".git"
+    remote_url = None
+    if git_dir.exists():
+        try:
+            res = subprocess.run(
+                ["git", "-C", str(project_dir), "remote", "get-url", "origin"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if res.returncode == 0:
+                remote_url = res.stdout.strip()
+        except Exception:
+            pass
+
+    owner = "polerix"
+    repo_name = project_name
+
+    if remote_url:
+        m = re.search(r"github\.com[:/]([^/]+)/([^/\.]+)", remote_url)
+        if m:
+            owner = m.group(1)
+            repo_name = m.group(2)
+
+    url_safe_repo = repo_name.replace(" ", "-")
+    github_url = f"https://github.com/{owner}/{url_safe_repo}"
+    pages_url = f"https://polerix.github.io/{url_safe_repo}/" if owner.lower() == "polerix" else f"https://{owner}.github.io/{url_safe_repo}/"
+    return owner, repo_name, github_url, pages_url
+
+
+def get_github_url(project_name: str, project_dir: Path = None) -> str:
+    if project_dir and project_dir.exists():
+        _, _, github_url, _ = get_repo_info(project_dir, project_name)
+        return github_url
     if project_name == "ButterPass":
         return "https://github.com/polerix/ButterPass-95"
     return f"https://github.com/polerix/{project_name}"
+
+
+def prefetch_pages_info(project_dirs: list[Path]):
+    global PAGES_CACHE
+    def fetch_one(p_dir):
+        if not (p_dir / ".git").exists():
+            return p_dir.name, None
+        owner, repo_name, _, _ = get_repo_info(p_dir, p_dir.name)
+        try:
+            res = subprocess.run(
+                ["gh", "api", f"repos/{owner}/{repo_name}/pages"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return p_dir.name, json.loads(res.stdout)
+        except Exception:
+            pass
+        return p_dir.name, None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        results = executor.map(fetch_one, project_dirs)
+        PAGES_CACHE = dict(results)
 
 
 def get_hosting_info(project_name: str, project_dir: Path) -> dict:
@@ -204,49 +268,46 @@ def get_hosting_info(project_name: str, project_dir: Path) -> dict:
     has_workflow = wf_dir.exists() and any(wf_dir.iterdir())
     has_pkg = (project_dir / "package.json").exists()
 
-    pages_data = None
-    try:
-        res = subprocess.run(
-            ["gh", "api", f"repos/polerix/{project_name}/pages"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            pages_data = json.loads(res.stdout)
-    except Exception:
-        pass
+    owner, repo_name, github_url, default_pages_url = get_repo_info(project_dir, project_name)
+
+    pages_data = PAGES_CACHE.get(project_name)
 
     if pages_data:
         btype = pages_data.get("build_type", "legacy")
-        url = pages_data.get("html_url") or f"https://polerix.github.io/{project_name}/"
+        url = pages_data.get("html_url") or default_pages_url
         return {
             "has_landing": True,
             "hosting_type": btype,
             "deployed_url": url,
-            "is_active": True
+            "is_active": True,
+            "github_url": github_url
         }
     elif has_static:
         return {
             "has_landing": True,
             "hosting_type": "legacy",
-            "deployed_url": f"https://polerix.github.io/{project_name}/",
-            "is_active": True
+            "deployed_url": default_pages_url,
+            "is_active": True,
+            "github_url": github_url
         }
     elif has_workflow or has_pkg:
         return {
             "has_landing": True,
             "hosting_type": "workflow",
-            "deployed_url": f"https://polerix.github.io/{project_name}/",
-            "is_active": True
+            "deployed_url": default_pages_url,
+            "is_active": True,
+            "github_url": github_url
         }
     else:
         copy_under_construction(project_name)
+        url_safe = repo_name.replace(" ", "-")
+        under_const_url = f"https://polerix.github.io/{url_safe}/under-construction.html"
         return {
             "has_landing": False,
             "hosting_type": "none",
-            "deployed_url": f"https://polerix.github.io/{project_name}/under-construction.html",
-            "is_active": False
+            "deployed_url": under_const_url,
+            "is_active": False,
+            "github_url": github_url
         }
 
 
@@ -310,7 +371,7 @@ def generate_card_html(project_name: str, project_dir: Path, idx_num: int) -> tu
         description = description[:77] + '...'
 
     open_url = h_info["deployed_url"]
-    github_url = get_github_url(project_name)
+    github_url = h_info["github_url"]
 
     badge = ""
     if is_recent:
@@ -359,11 +420,16 @@ def generate_pinned_html(pinned_list: list[tuple[str, str, str]], projects_dict:
             description = description[:77] + '...'
 
         open_url = default_url
+        github_url = get_github_url(name, p_dir if p_dir.exists() else None)
+
         if p_dir.exists():
             h_info = get_hosting_info(name, p_dir)
-            open_url = h_info["deployed_url"]
+            if h_info["has_landing"] and h_info["is_active"]:
+                open_url = h_info["deployed_url"]
+            elif not open_url:
+                open_url = h_info["deployed_url"]
+            github_url = h_info["github_url"]
 
-        github_url = get_github_url(name)
         bg_style = f' style="--bg-image: url({screenshot});"' if screenshot else ''
         sys_id = f"LCARS-PRIORITY-{idx:02d}"
 
@@ -383,16 +449,38 @@ def generate_pinned_html(pinned_list: list[tuple[str, str, str]], projects_dict:
     return '\n'.join(entries)
 
 
-def get_all_projects() -> list[tuple[Path, datetime]]:
-    projects = []
-    for item in GITHUB_DIR.iterdir():
-        if not item.is_dir():
-            continue
-        if item.name.startswith('.') or item.name.startswith('clawd'):
-            continue
-        if item.name == "big0time":
-            continue
+RENAMED_ALIASES = {
+    'cosmo brawl': 'cosmic-brawler',
+    'bpm-vending pigs': 'bpm-vending-pigs',
+}
 
+
+def get_all_projects() -> list[tuple[Path, datetime]]:
+    all_dirs = [item for item in GITHUB_DIR.iterdir() if item.is_dir() and not item.name.startswith('.') and not item.name.startswith('clawd') and item.name != "big0time"]
+
+    git_repos = {}
+    for d in all_dirs:
+        if (d / ".git").exists():
+            git_repos[d.name.lower()] = d
+            clean_d = d.name.lower().replace(" ", "-").replace("_", "-")
+            git_repos[clean_d] = d
+            _, rname, _, _ = get_repo_info(d, d.name)
+            git_repos[rname.lower()] = d
+            clean_r = rname.lower().replace(" ", "-").replace("_", "-")
+            git_repos[clean_r] = d
+
+    filtered_dirs = []
+    for d in all_dirs:
+        # If folder has no .git, skip it if a git repo with matching kebab/lowercase name or alias exists
+        if not (d / ".git").exists():
+            clean_name = d.name.lower().replace(" ", "-").replace("_", "-")
+            alias = RENAMED_ALIASES.get(d.name.lower())
+            if d.name.lower() in git_repos or clean_name in git_repos or (alias and alias in git_repos):
+                continue
+        filtered_dirs.append(d)
+
+    projects = []
+    for item in filtered_dirs:
         mod_date = get_project_modification_date(item)
         projects.append((item, mod_date))
 
@@ -404,6 +492,9 @@ def update_index_html():
     print(f"Scanning projects in {GITHUB_DIR}...")
     projects = get_all_projects()
     print(f"Found {len(projects)} projects")
+
+    print("Prefetching live GitHub Pages deployment info...")
+    prefetch_pages_info([p[0] for p in projects])
 
     projects_dict = {p[0].name: p for p in projects}
 
