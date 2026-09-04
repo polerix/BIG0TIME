@@ -514,10 +514,10 @@
     <!-- LCARS LEFT SIDEBAR BACKBONE -->
     <aside class="lcars-sidebar">
       <div class="lcars-elbow">LCARS</div>
-      <div class="lcars-bar-segment gold" onclick="filterCategory('all')">SYS-01</div>
-      <div class="lcars-bar-segment blue" onclick="filterCategory('business')">BUS-02</div>
-      <div class="lcars-bar-segment purple" onclick="filterCategory('games')">GME-03</div>
-      <div class="lcars-bar-segment red" onclick="filterCategory('toys')">LAB-04</div>
+      <div class="lcars-bar-segment gold" onclick="filterCategory('all')">ALL-01</div>
+      <div class="lcars-bar-segment blue" onclick="filterCategory('pinned')">PIN-02</div>
+      <div class="lcars-bar-segment purple" onclick="filterCategory('changed')">NEW-03</div>
+      <div class="lcars-bar-segment red" onclick="filterCategory('whatever')">WTV-04</div>
       <div class="lcars-sidebar-spacer"></div>
       <div class="lcars-bar-segment teal" id="sound-toggle" onclick="toggleAudio()">🔊 AUDIO</div>
       <div class="lcars-sidebar-endcap">BIG0TIME</div>
@@ -542,9 +542,9 @@
       <nav class="lcars-controls">
         <div class="lcars-filter-buttons">
           <button class="filter-btn active" onclick="filterCategory('all', this)">[ 01 // ALL ]</button>
-          <button class="filter-btn business" onclick="filterCategory('business', this)">[ 02 // BUSINESS ]</button>
-          <button class="filter-btn games" onclick="filterCategory('games', this)">[ 03 // GAMES ]</button>
-          <button class="filter-btn toys" onclick="filterCategory('toys', this)">[ 04 // TOYS & LABS ]</button>
+          <button class="filter-btn business" onclick="filterCategory('pinned', this)">[ 02 // PINNED SITES ]</button>
+          <button class="filter-btn games" onclick="filterCategory('changed', this)">[ 03 // NEWLY CHANGED ]</button>
+          <button class="filter-btn toys" onclick="filterCategory('whatever', this)">[ 04 // WHATEVER ]</button>
         </div>
         <div class="lcars-search-box">
           <input type="text" id="lcars-search-input" placeholder="SEARCH SYSTEM DATABASE..." oninput="handleSearch()" />
@@ -555,7 +555,7 @@
     <!-- SECTION: PINNED CORE SYSTEMS -->
     <div class="lcars-section-header amber">
       <div class="lcars-elbow-top"></div>
-      <div class="lcars-header-text">01 // FEATURED CORE SYSTEMS</div>
+      <div class="lcars-header-text">01 // PINNED SITES</div>
       <div class="lcars-header-bar"></div>
     </div>
     <div class="grid" id="grid-pinned">
@@ -732,7 +732,7 @@
     <!-- SECTION: BUSINESS & ENTERPRISE RELEVANCE -->
     <div class="lcars-section-header gold" id="sec-business">
       <div class="lcars-elbow-top"></div>
-      <div class="lcars-header-text">02 // BUSINESS & ENTERPRISE SOLUTIONS (23 NODES)</div>
+      <div class="lcars-header-text">02 // NEWLY CHANGED</div>
       <div class="lcars-header-bar"></div>
     </div>
     <div class="grid" id="grid-business">
@@ -1029,7 +1029,7 @@
     <!-- SECTION: GAMES & INTERACTIVE SIMULATIONS -->
     <div class="lcars-section-header blue" id="sec-games">
       <div class="lcars-elbow-top"></div>
-      <div class="lcars-header-text">03 // GAMES & INTERACTIVE SIMULATIONS (25 NODES)</div>
+      <div class="lcars-header-text">03 // WHATEVER</div>
       <div class="lcars-header-bar"></div>
     </div>
     <div class="grid" id="grid-games">
@@ -1338,7 +1338,7 @@
     <!-- SECTION: FUNKY TOYS & EXPERIMENTAL LABS -->
     <div class="lcars-section-header purple" id="sec-toys">
       <div class="lcars-elbow-top"></div>
-      <div class="lcars-header-text">04 // EXPERIMENTAL TOYS & LABS (38 NODES)</div>
+      <div class="lcars-header-text">04 // LEGACY HOLDING GRID</div>
       <div class="lcars-header-bar"></div>
     </div>
     <div class="grid" id="grid-toys">
@@ -1834,6 +1834,7 @@
 
   </div>
 
+  <script src="resources/catalog-rebuild.js"></script>
   <script>
     // LCARS Web Audio Synthesizer
     let audioEnabled = true;
@@ -1882,16 +1883,17 @@
       const toyGrid = document.getElementById('grid-toys');
 
       if (cat === 'all') {
-        [pinnedSec, busSec, gameSec, toySec, pinnedGrid, busGrid, gameGrid, toyGrid].forEach(el => el && (el.style.display = ''));
-      } else if (cat === 'business') {
+        [pinnedSec, busSec, gameSec, pinnedGrid, busGrid, gameGrid].forEach(el => el && (el.style.display = ''));
+        [toySec, toyGrid].forEach(el => el && (el.style.display = 'none'));
+      } else if (cat === 'pinned') {
+        [busSec, gameSec, toySec, busGrid, gameGrid, toyGrid].forEach(el => el && (el.style.display = 'none'));
+        [pinnedSec, pinnedGrid].forEach(el => el && (el.style.display = 'grid'));
+      } else if (cat === 'changed') {
         [pinnedSec, gameSec, toySec, pinnedGrid, gameGrid, toyGrid].forEach(el => el && (el.style.display = 'none'));
         [busSec, busGrid].forEach(el => el && (el.style.display = 'grid'));
-      } else if (cat === 'games') {
+      } else if (cat === 'whatever') {
         [pinnedSec, busSec, toySec, pinnedGrid, busGrid, toyGrid].forEach(el => el && (el.style.display = 'none'));
         [gameSec, gameGrid].forEach(el => el && (el.style.display = 'grid'));
-      } else if (cat === 'toys') {
-        [pinnedSec, busSec, gameSec, pinnedGrid, busGrid, gameGrid].forEach(el => el && (el.style.display = 'none'));
-        [toySec, toyGrid].forEach(el => el && (el.style.display = 'grid'));
       }
     }
 
@@ -1915,6 +1917,10 @@
       const stardate = (now.getFullYear() - 1900) * 1000 + (now.getMonth() * 30) + now.getDate() + (now.getHours() / 24);
       document.getElementById('stardate-display').innerText = 'SD ' + stardate.toFixed(1);
     }
+    if (window.applyBig0Catalog) {
+      window.applyBig0Catalog();
+    }
+
     updateStardate();
 
     // Attach click audio to buttons
